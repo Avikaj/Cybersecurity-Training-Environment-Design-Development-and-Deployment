@@ -1,0 +1,140 @@
+# Use admin/pass as user/password credentials to login to openemr (from OE_USER and OE_PASS below)
+# MYSQL_HOST and MYSQL_ROOT_PASS are required for openemr
+# MYSQL_USER, MYSQL_PASS, OE_USER, MYSQL_PASS are optional for openemr and
+#   if not provided, then default to openemr, openemr, admin, and pass respectively.
+version: '3.1'
+services:
+  mysql:
+    restart: always
+    image: mariadb:10.11
+    command: ['mysqld','--character-set-server=utf8mb4']
+    volumes:
+    - databasevolume:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+  openemr:
+    restart: always
+    image: smehdilaraib/oe:v1
+    ports:
+    - 80:80
+    - 443:443
+    volumes:
+    - logvolume01:/var/log
+    - sitevolume:/var/www/localhost/htdocs/openemr/sites
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASS: root
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      OE_USER: admin
+      OE_PASS: pass
+    depends_on:
+    - mysql
+  samba:
+    image: dperson/samba
+    environment:
+      TZ: 'EST5EDT'
+    networks:
+      - default
+    ports:
+      - "137:137/udp"
+      - "138:138/udp"
+      - "139:139/tcp"
+      - "9445:445/tcp"
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    volumes:
+      - samba_data:/var/samba/shared
+      - /var/www/localhost/htdocs/openemr/sites:/var/samba/shared/openemr_sites
+
+    command: >
+      -s "OpenEMR;/var/www/localhost/htdocs/openemr/sites;yes;no;no;OE_USER"
+      -u "admin;pass"
+      -p
+  
+  elasticsearch:
+    image: blacktop/elasticsearch:x-pack-7.4.0
+    environment:
+      - discovery.type=single-node
+    ports:
+      - "9200:9200"
+    networks:
+      - default
+
+  kibana:
+    depends_on:
+      - elasticsearch
+    image: blacktop/kibana:x-pack-7.4.0
+    environment:
+      - xpack.reporting.enabled=false
+    ports:
+      - "5601:5601"
+    links:
+      - elasticsearch
+    networks:
+      - default
+
+  zeek:
+    depends_on:
+      - kibana
+    image: blacktop/zeek:elastic
+    cap_add:
+      - NET_RAW
+    network_mode: "host"
+    command: -i af_packet::eth0 local
+
+  tinyproxy:
+    image: docker.io/kalaksi/tinyproxy
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    ports:
+      - 8888:8888
+    environment:
+      DISABLE_VIA_HEADER: 'yes'
+      STAT_HOST: tinyproxy.stats
+      MAX_CLIENTS: 100
+      # A space separated list. If not set or is empty, all networks are allowed.
+      ALLOWED_NETWORKS: 127.0.0.1/8 10.0.0.0/8 
+      # One of Critical, Error, Warning, Notice, Connect, Info
+      LOG_LEVEL: Notice
+      # Maximum number of seconds idle connections are allowed to remain open
+      TIMEOUT: 900
+      # Username for BasicAuth
+      # AUTH_USER: ''
+      # Password for BasicAuth (letters and digits only)
+      # Prefer secrets-mechanisms instead of environment variables.
+      # AUTH_PASSWORD: ''
+    # secrets:
+    #   - auth_password
+    # # With Alpine base image, this is required, for some reason, or /run/secrets won't get mounted.
+    tmpfs:
+      - /run
+    healthcheck:
+      test: ["CMD", "curl", "-I", "-H", "Host: tinyproxy.stats", "http://localhost:8888"]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+    # volumes:
+    #   # If not using docker-compose for secrets, you can still manually mount a file containing the password.
+    #   - ./secrets/auth_password:/run/secrets/auth_password:ro
+  vault:
+    image: hashicorp/vault:latest
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: testtoken
+    ports:
+      - 8200:8200
+    privileged: true
+    volumes:
+    - vault-data:/var/lib/vault:rw
+
+volumes:
+  logvolume01: {}
+  sitevolume: {}
+  databasevolume: {}
+  samba_data: {}
+  vault-data: {}
