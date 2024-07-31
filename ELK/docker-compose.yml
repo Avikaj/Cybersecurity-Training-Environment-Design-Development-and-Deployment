@@ -30,30 +30,15 @@ services:
     restart: always
     volumes:
       - ./logstash/pipeline:/usr/share/logstash/pipeline
-      - ./logstash/:/logstash_dir
+      - ./logstash/pipeline:/logstash_dir
     command: logstash -f /logstash_dir/logstash.conf 
     depends_on:
       - elasticsearch
     ports:
       - '9600:9600'
       - '5044:5044'  # Added port for Logstash input
-    networks:
-      - elk
-
-  Logstash:
-    image: logstash:7.16.2
-    container_name: logstash
-    restart: always
-    volumes:
-    - ./logstash/pipeline:/usr/share/logstash/pipeline
-    - ./logstash/:/logstash_dir
-    command: logstash -f /logstash_dir/logstash.conf 
-    depends_on:
-      - Elasticsearch
-    ports:
-    - '9600:9600'
     environment:
-      LS_JAVA_OPTS: "-Xmx256m -Xms256m"    
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"  
     networks:
       - elk
 
