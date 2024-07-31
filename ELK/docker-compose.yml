@@ -10,7 +10,7 @@ services:
       - logstash
 
   elasticsearch:
-    image: elasticsearch:7.17.3
+    image: elasticsearch:7.16.2
     container_name: elasticsearch
     restart: always
     volumes:
@@ -25,7 +25,7 @@ services:
       - elk
 
   logstash:
-    image: logstash:7.17.3
+    image: logstash:7.16.2
     container_name: logstash
     restart: always
     volumes:
@@ -37,13 +37,28 @@ services:
     ports:
       - '9600:9600'
       - '5044:5044'  # Added port for Logstash input
+    networks:
+      - elk
+
+  Logstash:
+    image: logstash:7.16.2
+    container_name: logstash
+    restart: always
+    volumes:
+    - ./logstash/pipeline:/usr/share/logstash/pipeline
+    - ./logstash/:/logstash_dir
+    command: logstash -f /logstash_dir/logstash.conf 
+    depends_on:
+      - Elasticsearch
+    ports:
+    - '9600:9600'
     environment:
       LS_JAVA_OPTS: "-Xmx256m -Xms256m"    
     networks:
       - elk
 
   kibana:
-    image: kibana:7.17.3
+    image: kibana:7.16.2
     container_name: kibana
     restart: always       
     ports:
@@ -54,7 +69,6 @@ services:
       - elasticsearch  
     networks:
       - elk
-
 volumes:
   elastic_data: {}
 
